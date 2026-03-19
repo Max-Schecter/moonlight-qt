@@ -153,6 +153,16 @@ void SdlInputHandler::performSpecialKeyCombo(KeyCombo combo)
         SDL_PushEvent(&quitExitEvent);
         break;
 
+    case KeyComboToggleRemapping:
+        m_CustomRemappingEnabled = !m_CustomRemappingEnabled;
+        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                    "Detected remapping toggle combo: remapping %s",
+                    m_CustomRemappingEnabled ? "enabled" : "disabled");
+
+        // Ensure we don't leave stale key state when changing mapping behavior.
+        raiseAllKeys();
+        break;
+
     default:
         Q_UNREACHABLE();
     }
@@ -167,6 +177,14 @@ void SdlInputHandler::handleKeyEvent(SDL_KeyboardEvent* event)
     if (event->repeat) {
         // Ignore repeat key down events
         SDL_assert(event->state == SDL_PRESSED);
+        return;
+    }
+
+    // Remap slash key to middle mouse button for this fork.
+    if (m_CustomRemappingEnabled && event->keysym.scancode == SDL_SCANCODE_SLASH) {
+        LiSendMouseButtonEvent(event->state == SDL_PRESSED ?
+                                   BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE,
+                               BUTTON_MIDDLE);
         return;
     }
 
@@ -201,18 +219,41 @@ void SdlInputHandler::handleKeyEvent(SDL_KeyboardEvent* event)
         }
     }
 
+    bool altModifier = event->keysym.mod & KMOD_ALT;
+    bool ctrlModifier = event->keysym.mod & KMOD_CTRL;
+
+    if (m_CustomRemappingEnabled) {
+        // Additional fork remap: Right Option should act like Right Ctrl.
+        // Apply this at modifier level too, so combinations (e.g. Right Option + C)
+        // are treated as Ctrl combos.
+        if (event->keysym.mod & KMOD_RALT) {
+            ctrlModifier = true;
+            altModifier = (event->keysym.mod & KMOD_LALT) != 0;
+        }
+
+        // Additional fork remap: swap Right Ctrl and Right Alt semantics.
+        if (event->keysym.scancode == SDL_SCANCODE_RCTRL) {
+            altModifier = true;
+            ctrlModifier = false;
+        }
+        else if (event->keysym.scancode == SDL_SCANCODE_RALT) {
+            ctrlModifier = true;
+            altModifier = false;
+        }
+    }
+
     // Set modifier flags
     modifiers = 0;
-    if (event->keysym.mod & KMOD_CTRL) {
+    if (m_CustomRemappingEnabled ? (event->keysym.mod & KMOD_GUI) : ctrlModifier) {
         modifiers |= MODIFIER_CTRL;
     }
-    if (event->keysym.mod & KMOD_ALT) {
+    if (altModifier) {
         modifiers |= MODIFIER_ALT;
     }
     if (event->keysym.mod & KMOD_SHIFT) {
         modifiers |= MODIFIER_SHIFT;
     }
-    if (event->keysym.mod & KMOD_GUI) {
+    if (m_CustomRemappingEnabled ? ctrlModifier : (event->keysym.mod & KMOD_GUI)) {
         if (isSystemKeyCaptureActive()) {
             modifiers |= MODIFIER_META;
         }
@@ -346,28 +387,46 @@ void SdlInputHandler::handleKeyEvent(SDL_KeyboardEvent* event)
                 keyCode = 0xA1;
                 break;
             case SDL_SCANCODE_LCTRL:
-                keyCode = 0xA2;
+                if (m_CustomRemappingEnabled) {
+                    if (!isSystemKeyCaptureActive()) {
+                        return;
+                    }
+                    keyCode = 0x5B;
+                }
+                else {
+                    keyCode = 0xA2;
+                }
                 break;
             case SDL_SCANCODE_RCTRL:
-                keyCode = 0xA3;
+                keyCode = m_CustomRemappingEnabled ? 0xA5 : 0xA3;
                 break;
             case SDL_SCANCODE_LALT:
                 keyCode = 0xA4;
                 break;
             case SDL_SCANCODE_RALT:
-                keyCode = 0xA5;
+                keyCode = m_CustomRemappingEnabled ? 0xA3 : 0xA5;
                 break;
             case SDL_SCANCODE_LGUI:
-                if (!isSystemKeyCaptureActive()) {
-                    return;
+                if (m_CustomRemappingEnabled) {
+                    keyCode = 0xA2;
                 }
-                keyCode = 0x5B;
+                else {
+                    if (!isSystemKeyCaptureActive()) {
+                        return;
+                    }
+                    keyCode = 0x5B;
+                }
                 break;
             case SDL_SCANCODE_RGUI:
-                if (!isSystemKeyCaptureActive()) {
-                    return;
+                if (m_CustomRemappingEnabled) {
+                    keyCode = 0xA3;
                 }
-                keyCode = 0x5C;
+                else {
+                    if (!isSystemKeyCaptureActive()) {
+                        return;
+                    }
+                    keyCode = 0x5C;
+                }
                 break;
             case SDL_SCANCODE_APPLICATION:
                 keyCode = 0x5D;

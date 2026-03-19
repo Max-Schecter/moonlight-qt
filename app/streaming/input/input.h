@@ -167,6 +167,7 @@ private:
         KeyComboPasteText,
         KeyComboTogglePointerRegionLock,
         KeyComboQuitAndExit,
+        KeyComboToggleRemapping,
         KeyComboMax
     };
 
@@ -213,6 +214,7 @@ private:
     bool m_PendingMouseButtonsAllUpOnVideoRegionLeave;
     bool m_PointerRegionLockActive;
     bool m_PointerRegionLockToggledByUser;
+    bool m_CustomRemappingEnabled;
 
     int m_GamepadMask;
     GamepadState m_GamepadState[MAX_GAMEPADS];

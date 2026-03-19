@@ -19,6 +19,7 @@ SdlInputHandler::SdlInputHandler(StreamingPreferences& prefs, int streamWidth, i
       m_PendingMouseButtonsAllUpOnVideoRegionLeave(false),
       m_PointerRegionLockActive(false),
       m_PointerRegionLockToggledByUser(false),
+      m_CustomRemappingEnabled(true),
       m_FakeCaptureActive(false),
       m_CaptureSystemKeysMode(prefs.captureSysKeysMode),
       m_MouseCursorCapturedVisibilityState(SDL_DISABLE),
@@ -115,6 +116,11 @@ SdlInputHandler::SdlInputHandler(StreamingPreferences& prefs, int streamWidth, i
     m_SpecialKeyCombos[KeyComboQuitAndExit].keyCode = SDLK_e;
     m_SpecialKeyCombos[KeyComboQuitAndExit].scanCode = SDL_SCANCODE_E;
     m_SpecialKeyCombos[KeyComboQuitAndExit].enabled = true;
+
+    m_SpecialKeyCombos[KeyComboToggleRemapping].keyCombo = KeyComboToggleRemapping;
+    m_SpecialKeyCombos[KeyComboToggleRemapping].keyCode = SDLK_r;
+    m_SpecialKeyCombos[KeyComboToggleRemapping].scanCode = SDL_SCANCODE_R;
+    m_SpecialKeyCombos[KeyComboToggleRemapping].enabled = true;
 
     m_OldIgnoreDevices = SDL_GetHint(SDL_HINT_GAMECONTROLLER_IGNORE_DEVICES);
     m_OldIgnoreDevicesExcept = SDL_GetHint(SDL_HINT_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT);
