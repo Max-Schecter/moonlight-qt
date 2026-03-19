@@ -7,6 +7,10 @@
 #include "SDL_compat.h"
 #include "utils.h"
 
+#ifdef Q_OS_DARWIN
+#include "macos_clipboard.h"
+#endif
+
 #ifdef HAVE_FFMPEG
 #include "video/ffmpeg.h"
 #endif
@@ -28,6 +32,7 @@
 #define SDL_CODE_GAMECONTROLLER_SET_MOTION_EVENT_STATE 103
 #define SDL_CODE_GAMECONTROLLER_SET_CONTROLLER_LED 104
 #define SDL_CODE_GAMECONTROLLER_SET_ADAPTIVE_TRIGGERS 105
+#define SDL_CODE_CLIPBOARD_APPLY 106
 
 #include <openssl/rand.h>
 
@@ -60,7 +65,8 @@ CONNECTION_LISTENER_CALLBACKS Session::k_ConnCallbacks = {
     Session::clRumbleTriggers,
     Session::clSetMotionEventState,
     Session::clSetControllerLED,
-    Session::clSetAdaptiveTriggers
+    Session::clSetAdaptiveTriggers,
+    Session::clSetClipboardText
 };
 
 Session* Session::s_ActiveSession;
@@ -273,6 +279,23 @@ void Session::clSetAdaptiveTriggers(uint16_t controllerNumber, uint8_t eventFlag
     setControllerLEDEvent.user.data2 = (void *) state;
     SDL_PushEvent(&setControllerLEDEvent);
 }
+
+void Session::clSetClipboardText(const char* text, uint32_t length, uint32_t generation)
+{
+    std::lock_guard<std::mutex> lock(s_ActiveSession->m_ClipboardLock);
+    s_ActiveSession->m_PendingClipboardText.assign(text, length);
+    s_ActiveSession->m_PendingClipboardGeneration = generation;
+
+    if (!s_ActiveSession->m_ClipboardEventQueued) {
+        SDL_Event clipboardEvent = {};
+        clipboardEvent.type = SDL_USEREVENT;
+        clipboardEvent.user.code = SDL_CODE_CLIPBOARD_APPLY;
+        if (SDL_PushEvent(&clipboardEvent) == 1) {
+            s_ActiveSession->m_ClipboardEventQueued = true;
+        }
+    }
+}
+
 
 
 bool Session::chooseDecoder(StreamingPreferences::VideoDecoderSelection vds,
@@ -562,6 +585,13 @@ Session::Session(NvComputer* computer, NvApp& app, StreamingPreferences *prefere
       m_MouseEmulationRefCount(0),
       m_FlushingWindowEventsRef(0),
       m_ShouldExit(false),
+      m_PendingClipboardGeneration(0),
+      m_ClipboardEventQueued(false),
+      m_LocalClipboardGeneration(0),
+      m_LastRemoteClipboardGeneration(0),
+      m_LastClipboardPollTimeMs(0),
+      m_LastClipboardChangeCount(0),
+      m_IgnoredClipboardChangeCount(0),
       m_AsyncConnectionSuccess(false),
       m_PortTestResults(0),
       m_OpusDecoder(nullptr),
@@ -1937,6 +1967,44 @@ void Session::exec()
     // sleep precision and more accurate callback timing.
     SDL_SetHint(SDL_HINT_TIMER_RESOLUTION, "1");
 
+#ifdef Q_OS_DARWIN
+    auto pollClipboardSync = [this]() {
+        if (!(LiGetHostFeatureFlags() & LI_FF_CLIPBOARD_SYNC) || !macos_clipboard::isAvailable()) {
+            return;
+        }
+
+        uint64_t now = SDL_GetTicks64();
+        if (now - m_LastClipboardPollTimeMs < 200) {
+            return;
+        }
+
+        m_LastClipboardPollTimeMs = now;
+
+        uint64_t changeCount = macos_clipboard::getChangeCount();
+        if (changeCount == 0 || changeCount == m_LastClipboardChangeCount) {
+            return;
+        }
+
+        m_LastClipboardChangeCount = changeCount;
+        if (changeCount == m_IgnoredClipboardChangeCount) {
+            return;
+        }
+
+        std::string clipboardText = macos_clipboard::getText();
+        if (clipboardText == m_LastRemoteClipboardText) {
+            return;
+        }
+
+        LiSendClipboardText(clipboardText.data(),
+                            (uint32_t)clipboardText.size(),
+                            ++m_LocalClipboardGeneration);
+    };
+
+    if ((LiGetHostFeatureFlags() & LI_FF_CLIPBOARD_SYNC) && macos_clipboard::isAvailable()) {
+        m_LastClipboardChangeCount = macos_clipboard::getChangeCount();
+    }
+#endif
+
     int currentDisplayIndex = SDL_GetWindowDisplayIndex(m_Window);
 
     // Now that we're about to stream, any SDL_QUIT event is expected
@@ -1969,6 +2037,9 @@ void Session::exec()
         // and other problems.
         if (!SDL_WaitEventTimeout(&event, 1000)) {
             presence.runCallbacks();
+#ifdef Q_OS_DARWIN
+            pollClipboardSync();
+#endif
             continue;
         }
 #else
@@ -1985,6 +2056,9 @@ void Session::exec()
             SDL_Delay(10);
 #endif
             presence.runCallbacks();
+#ifdef Q_OS_DARWIN
+            pollClipboardSync();
+#endif
             continue;
         }
 #endif
@@ -2028,6 +2102,26 @@ void Session::exec()
             case SDL_CODE_GAMECONTROLLER_SET_ADAPTIVE_TRIGGERS:
                 m_InputHandler->setAdaptiveTriggers((uint16_t)(uintptr_t)event.user.data1,
                                                     (DualSenseOutputReport *)event.user.data2);
+                break;
+            case SDL_CODE_CLIPBOARD_APPLY:
+#ifdef Q_OS_DARWIN
+                {
+                    std::string clipboardText;
+                    uint32_t generation = 0;
+                    {
+                        std::lock_guard<std::mutex> lock(m_ClipboardLock);
+                        clipboardText = m_PendingClipboardText;
+                        generation = m_PendingClipboardGeneration;
+                        m_ClipboardEventQueued = false;
+                    }
+
+                    macos_clipboard::setText(clipboardText);
+                    m_IgnoredClipboardChangeCount = macos_clipboard::getChangeCount();
+                    m_LastClipboardChangeCount = m_IgnoredClipboardChangeCount;
+                    m_LastRemoteClipboardText = clipboardText;
+                    m_LastRemoteClipboardGeneration = generation;
+                }
+#endif
                 break;
             default:
                 SDL_assert(false);

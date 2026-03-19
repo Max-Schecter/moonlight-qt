@@ -164,7 +164,6 @@ private:
         KeyComboToggleMouseMode,
         KeyComboToggleCursorHide,
         KeyComboToggleMinimize,
-        KeyComboPasteText,
         KeyComboTogglePointerRegionLock,
         KeyComboQuitAndExit,
         KeyComboToggleRemapping,

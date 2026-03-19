@@ -1,5 +1,9 @@
 #pragma once
 
+#include <atomic>
+#include <mutex>
+#include <string>
+
 #include <QSemaphore>
 #include <QQuickWindow>
 
@@ -223,6 +227,9 @@ private:
     void clSetAdaptiveTriggers(uint16_t controllerNumber, uint8_t eventFlags, uint8_t typeLeft, uint8_t typeRight, uint8_t *left, uint8_t *right);
 
     static
+    void clSetClipboardText(const char* text, uint32_t length, uint32_t generation);
+
+    static
     int arInit(int audioConfiguration,
                const POPUS_MULTISTREAM_CONFIGURATION opusConfig,
                void* arContext, int arFlags);
@@ -263,6 +270,17 @@ private:
     int m_FlushingWindowEventsRef;
     QStringList m_LaunchWarnings;
     bool m_ShouldExit;
+
+    std::mutex m_ClipboardLock;
+    std::string m_PendingClipboardText;
+    uint32_t m_PendingClipboardGeneration;
+    bool m_ClipboardEventQueued;
+    uint32_t m_LocalClipboardGeneration;
+    uint32_t m_LastRemoteClipboardGeneration;
+    std::string m_LastRemoteClipboardText;
+    uint64_t m_LastClipboardPollTimeMs;
+    uint64_t m_LastClipboardChangeCount;
+    uint64_t m_IgnoredClipboardChangeCount;
 
     bool m_AsyncConnectionSuccess;
     int m_PortTestResults;

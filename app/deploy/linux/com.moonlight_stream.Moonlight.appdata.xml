@@ -358,7 +358,6 @@
 				<ul>
 					<li>System keyboard shortcuts (Alt+Tab, Super key, Ctrl+Shift+Esc, etc.) can now be (optionally) captured in windowed mode</li>
 					<li>System keyboard shortcuts can now be captured under Wayland</li>
-					<li>Added support for typing the client's clipboard text on the host by pressing Ctrl+Alt+Shift+V</li>
 					<li>Added Ctrl+Alt+Shift+D key combo to minimize the streaming window</li>
 					<li>Added Ctrl+Alt+Shift+C key combo to show the local cursor while streaming in remote desktop mouse mode</li>
 					<li>Added Select+L1+R1+X gamepad button combo to toggle performance overlay</li>

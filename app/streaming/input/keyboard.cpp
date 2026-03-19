@@ -92,40 +92,6 @@ void SdlInputHandler::performSpecialKeyCombo(KeyCombo combo)
         SDL_MinimizeWindow(m_Window);
         break;
 
-    case KeyComboPasteText:
-    {
-        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
-                    "Detected type clipboard text combo");
-
-        // Force raise all keys to ensure that none of them interfere
-        // with the text we're going to type.
-        raiseAllKeys();
-
-        char* text;
-        if (SDL_HasClipboardText() && (text = SDL_GetClipboardText()) != nullptr) {
-            // Sending both CR and LF will lead to two newlines in the destination for
-            // each newline in the source, so we fix up any CRLFs into just a single LF.
-            for (char* c = text; *c != 0; c++) {
-                if (*c == '\r' && *(c + 1) == '\n') {
-                    // We're using strlen() rather than strlen() - 1 since we need to add 1
-                    // to copy the null terminator which is not included in strlen()'s count.
-                    memmove(c, c + 1, strlen(c));
-                }
-            }
-
-            // Send this text to the PC
-            LiSendUtf8TextEvent(text, (unsigned int)strlen(text));
-
-            // SDL_GetClipboardText() allocates, so we must free
-            SDL_free((void*)text);
-        }
-        else {
-            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
-                        "No text in clipboard to paste!");
-        }
-        break;
-    }
-
     case KeyComboTogglePointerRegionLock:
         SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
                     "Detected pointer region lock toggle combo");
